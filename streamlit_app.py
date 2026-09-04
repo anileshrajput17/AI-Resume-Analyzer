@@ -1,79 +1,87 @@
 import streamlit as st
-import re
 import io
+import re
 
 st.set_page_config(
     page_title="AI Resume Analyzer",
-    page_icon="📄",
+    page_icon="🤖",
     layout="centered"
 )
 
-# ---------- TEXT EXTRACTION ----------
+# =========================
+# TEXT EXTRACTION
+# =========================
 
 def extract_text(uploaded_file):
     file_name = uploaded_file.name.lower()
     file_bytes = uploaded_file.getvalue()
 
-    # PDF
+    # ---------- PDF ----------
     if file_name.endswith(".pdf"):
         try:
             import fitz
 
-            document = fitz.open(stream=file_bytes, filetype="pdf")
+            doc = fitz.open(stream=file_bytes, filetype="pdf")
+            pages_text = []
 
-            # First try normal text extraction
-            text = "\n".join(page.get_text() for page in document).strip()
+            for page in doc:
+                page_text = page.get_text("text").strip()
 
-            # If PDF has little/no text, try OCR
-            if len(re.sub(r"\s+", "", text)) < 80:
+                # Normal text PDF
+                if page_text:
+                    pages_text.append(page_text)
+                    continue
+
+                # Scanned/image PDF OCR
                 try:
                     import pytesseract
                     from PIL import Image
 
-                    ocr_text = []
+                    pix = page.get_pixmap(
+                        matrix=fitz.Matrix(2, 2),
+                        alpha=False
+                    )
 
-                    for page in document:
-                        pix = page.get_pixmap(
-                            matrix=fitz.Matrix(2, 2),
-                            alpha=False
-                        )
+                    img = Image.open(
+                        io.BytesIO(pix.tobytes("png"))
+                    )
 
-                        img = Image.frombytes(
-                            "RGB",
-                            [pix.width, pix.height],
-                            pix.samples
-                        )
+                    ocr_text = pytesseract.image_to_string(img)
 
-                        page_text = pytesseract.image_to_string(img)
-
-                        if page_text.strip():
-                            ocr_text.append(page_text)
-
-                    text = "\n".join(ocr_text).strip()
+                    if ocr_text.strip():
+                        pages_text.append(ocr_text)
 
                 except Exception:
                     pass
 
-            document.close()
-            return text
+            doc.close()
+
+            return "\n".join(pages_text)
 
         except Exception:
             return ""
 
-    # DOCX
-    elif file_name.endswith(".docx"):
+    # ---------- DOCX ----------
+    if file_name.endswith(".docx"):
         try:
             from docx import Document
 
-            document = Document(io.BytesIO(file_bytes))
+            doc = Document(io.BytesIO(file_bytes))
 
-            paragraphs = [
-                paragraph.text.strip()
-                for paragraph in document.paragraphs
-                if paragraph.text.strip()
-            ]
+            text_parts = []
 
-            return "\n".join(paragraphs)
+            for paragraph in doc.paragraphs:
+                if paragraph.text.strip():
+                    text_parts.append(paragraph.text.strip())
+
+            # Also read tables
+            for table in doc.tables:
+                for row in table.rows:
+                    for cell in row.cells:
+                        if cell.text.strip():
+                            text_parts.append(cell.text.strip())
+
+            return "\n".join(text_parts)
 
         except Exception:
             return ""
@@ -81,148 +89,210 @@ def extract_text(uploaded_file):
     return ""
 
 
-# ---------- ANALYSIS ----------
+# =========================
+# ANALYSIS
+# =========================
 
 def analyze_resume(text):
+
     text_lower = text.lower()
 
-    # Skills
-    skills = [
-        "python", "java", "javascript", "html", "css",
-        "sql", "excel", "powerpoint", "word",
-        "communication", "leadership", "teamwork",
-        "problem solving", "data analysis", "machine learning",
-        "artificial intelligence", "project management",
-        "marketing", "research", "management",
-        "c++", "c#", "php", "react", "node.js",
-        "git", "github", "aws", "docker", "tableau"
-    ]
+    # ---------- SKILLS ----------
+    skills = {
+        "Python": r"\bpython\b",
+        "Java": r"\bjava\b",
+        "JavaScript": r"\bjavascript\b",
+        "HTML": r"\bhtml\b",
+        "CSS": r"\bcss\b",
+        "SQL": r"\bsql\b",
+        "Excel": r"\bexcel\b",
+        "PowerPoint": r"\bpowerpoint\b",
+        "Word": r"\bms word\b|\bword\b",
+        "Communication": r"\bcommunication\b",
+        "Leadership": r"\bleadership\b",
+        "Teamwork": r"\bteamwork\b|\bteam work\b",
+        "Problem Solving": r"\bproblem solving\b",
+        "Data Analysis": r"\bdata analysis\b",
+        "Machine Learning": r"\bmachine learning\b",
+        "Artificial Intelligence": r"\bartificial intelligence\b|\bai\b",
+        "Project Management": r"\bproject management\b",
+        "Marketing": r"\bmarketing\b",
+        "Research": r"\bresearch\b",
+        "Management": r"\bmanagement\b",
+        "C++": r"\bc\+\+\b",
+        "C": r"\bc programming\b|\blanguage c\b",
+        "Git": r"\bgit\b",
+        "GitHub": r"\bgithub\b",
+        "Power BI": r"\bpower bi\b",
+        "Communication Skills": r"\bcommunication skills\b"
+    }
 
-    found_skills = [
-        skill for skill in skills
-        if re.search(r"\b" + re.escape(skill) + r"\b", text_lower)
-    ]
+    found_skills = []
 
-    # Sections
-    education_words = [
-        "education", "qualification", "degree",
-        "bachelor", "master", "school", "college",
-        "university", "b.tech", "bba", "mba"
-    ]
+    for skill, pattern in skills.items():
+        if re.search(pattern, text_lower):
+            found_skills.append(skill)
 
-    experience_words = [
-        "experience", "work experience",
-        "employment", "internship", "worked",
-        "professional experience"
-    ]
+    # ---------- SECTIONS ----------
 
-    project_words = [
-        "project", "projects"
-    ]
+    section_patterns = {
 
-    certification_words = [
-        "certification", "certificate",
-        "certifications", "certified"
-    ]
+        "education": [
+            r"\beducation\b",
+            r"\bacademic qualification\b",
+            r"\bqualification\b",
+            r"\bdegree\b",
+            r"\bbachelor\b",
+            r"\bmaster\b",
+            r"\bcollege\b",
+            r"\buniversity\b",
+            r"\bschool\b"
+        ],
 
-    summary_words = [
-        "summary", "objective", "profile",
-        "career objective", "professional summary"
-    ]
+        "experience": [
+            r"\bexperience\b",
+            r"\bwork experience\b",
+            r"\bprofessional experience\b",
+            r"\bemployment\b",
+            r"\binternship\b",
+            r"\bworked\b"
+        ],
 
-    contact_words = [
-        "email", "phone", "mobile", "linkedin"
-    ]
+        "projects": [
+            r"\bprojects\b",
+            r"\bproject\b",
+            r"\bacademic projects\b",
+            r"\bpersonal projects\b"
+        ],
 
-    education_found = any(word in text_lower for word in education_words)
-    experience_found = any(word in text_lower for word in experience_words)
-    projects_found = any(word in text_lower for word in project_words)
-    certifications_found = any(word in text_lower for word in certification_words)
-    summary_found = any(word in text_lower for word in summary_words)
+        "certifications": [
+            r"\bcertification\b",
+            r"\bcertifications\b",
+            r"\bcertificate\b",
+            r"\bcertificates\b"
+        ],
 
-    email_found = bool(
-        re.search(r"[\w\.-]+@[\w\.-]+\.\w+", text_lower)
-    )
+        "summary": [
+            r"\bsummary\b",
+            r"\bprofessional summary\b",
+            r"\bcareer objective\b",
+            r"\bobjective\b",
+            r"\bprofile\b",
+            r"\babout me\b"
+        ],
 
-    phone_found = bool(
-        re.search(r"\b\d{10}\b", text_lower)
-    )
+        "contact": [
+            r"\bemail\b",
+            r"\bphone\b",
+            r"\bmobile\b",
+            r"\blinkedin\b",
+            r"\bgithub\b"
+        ]
+    }
 
-    linkedin_found = "linkedin" in text_lower
+    sections = {}
 
-    contact_score = 0
+    for section, patterns in section_patterns.items():
+        sections[section] = any(
+            re.search(pattern, text_lower)
+            for pattern in patterns
+        )
 
-    if email_found:
-        contact_score += 2
+    # =========================
+    # DYNAMIC SCORING
+    # =========================
 
-    if phone_found:
-        contact_score += 2
+    score = 0
 
-    if linkedin_found:
-        contact_score += 1
+    # Education: 15
+    if sections["education"]:
+        score += 15
 
-    # ---------- SCORING ----------
+    # Skills: 25
+    skill_score = min(len(found_skills) * 2.5, 25)
+    score += skill_score
 
-    education_score = 15 if education_found else 0
+    # Experience: 20
+    if sections["experience"]:
+        score += 20
 
-    # More skills = higher score, but capped
-    skill_score = min(len(found_skills) * 2.5, 20)
+    # Projects: 15
+    if sections["projects"]:
+        score += 15
 
-    experience_score = 20 if experience_found else 0
+    # Certifications: 10
+    if sections["certifications"]:
+        score += 10
 
-    project_score = 15 if projects_found else 0
+    # Summary: 5
+    if sections["summary"]:
+        score += 5
 
-    certification_score = 10 if certifications_found else 0
+    # Contact details: 5
+    if sections["contact"]:
+        score += 5
 
-    summary_score = 5 if summary_found else 0
+    score = min(round(score), 100)
 
-    # Content quality based on text length
-    word_count = len(text_lower.split())
+    # =========================
+    # SUGGESTIONS
+    # =========================
 
-    if word_count >= 500:
-        content_score = 10
-    elif word_count >= 300:
-        content_score = 7
-    elif word_count >= 150:
-        content_score = 4
-    else:
-        content_score = 1
+    suggestions = []
 
-    score = round(
-        education_score
-        + skill_score
-        + experience_score
-        + project_score
-        + certification_score
-        + summary_score
-        + contact_score
-        + content_score
-    )
+    if not sections["summary"]:
+        suggestions.append(
+            "Add a professional summary or career objective."
+        )
 
-    score = min(score, 100)
+    if not sections["education"]:
+        suggestions.append(
+            "Add a clear Education section."
+        )
+
+    if len(found_skills) < 5:
+        suggestions.append(
+            "Add more relevant technical and soft skills."
+        )
+
+    if not sections["experience"]:
+        suggestions.append(
+            "Add work experience, internship or relevant practical experience."
+        )
+
+    if not sections["projects"]:
+        suggestions.append(
+            "Add academic or personal projects."
+        )
+
+    if not sections["certifications"]:
+        suggestions.append(
+            "Add relevant certifications if you have them."
+        )
+
+    if not sections["contact"]:
+        suggestions.append(
+            "Make sure your contact information is clearly visible."
+        )
 
     return {
         "score": score,
         "skills": found_skills,
-        "education": education_found,
-        "experience": experience_found,
-        "projects": projects_found,
-        "certifications": certifications_found,
-        "summary": summary_found,
-        "email": email_found,
-        "phone": phone_found,
-        "linkedin": linkedin_found,
-        "word_count": word_count
+        "sections": sections,
+        "suggestions": suggestions
     }
 
 
-# ---------- UI ----------
+# =========================
+# USER INTERFACE
+# =========================
 
 st.title("🤖 AI Resume Analyzer")
 
 st.write(
     "Upload your resume and get an automated analysis "
-    "based on skills, education, experience, projects and certifications."
+    "based on skills, education, experience, projects, "
+    "certifications and resume structure."
 )
 
 st.divider()
@@ -242,14 +312,18 @@ if resume is not None:
     if not text.strip():
 
         st.error(
-            "❌ I couldn't read the text from this file. "
-            "Please try another PDF or DOCX file."
+            "❌ I couldn't extract readable text from this file."
+        )
+
+        st.info(
+            "Try a text-based PDF/DOCX. Scanned PDFs require OCR support."
         )
 
     else:
 
         result = analyze_resume(text)
 
+        # ---------- SCORE ----------
         st.subheader("📊 Resume Analysis")
 
         st.metric(
@@ -259,50 +333,26 @@ if resume is not None:
 
         st.divider()
 
-        st.write("### 🔍 Analysis")
+        # ---------- SECTIONS ----------
+        st.write("### 📋 Resume Sections")
 
-        if result["education"]:
-            st.write("✅ Education section detected")
-        else:
-            st.write("❌ Education section missing")
+        section_names = {
+            "education": "Education",
+            "experience": "Experience",
+            "projects": "Projects",
+            "certifications": "Certifications",
+            "summary": "Professional Summary",
+            "contact": "Contact Information"
+        }
 
-        if result["experience"]:
-            st.write("✅ Experience section detected")
-        else:
-            st.write("⚠️ Experience section missing")
+        for key, name in section_names.items():
 
-        if result["projects"]:
-            st.write("✅ Projects section detected")
-        else:
-            st.write("⚠️ Projects section missing")
+            if result["sections"][key]:
+                st.write(f"✅ {name} detected")
+            else:
+                st.write(f"⚠️ {name} not detected")
 
-        if result["certifications"]:
-            st.write("✅ Certifications detected")
-        else:
-            st.write("⚠️ Certifications not detected")
-
-        if result["summary"]:
-            st.write("✅ Professional summary/objective detected")
-        else:
-            st.write("⚠️ Professional summary/objective missing")
-
-        st.write("### 📞 Contact Information")
-
-        if result["email"]:
-            st.write("✅ Email detected")
-        else:
-            st.write("⚠️ Email not detected")
-
-        if result["phone"]:
-            st.write("✅ Phone number detected")
-        else:
-            st.write("⚠️ Phone number not detected")
-
-        if result["linkedin"]:
-            st.write("✅ LinkedIn detected")
-        else:
-            st.write("⚠️ LinkedIn not detected")
-
+        # ---------- SKILLS ----------
         st.write("### 🛠️ Skills Detected")
 
         if result["skills"]:
@@ -310,53 +360,39 @@ if resume is not None:
         else:
             st.write("No common skills detected.")
 
-        st.write("### 📄 Resume Content")
+        # ---------- TEXT INFO ----------
+        st.write("### 📄 Resume Information")
 
-        st.write(
-            f"Approximately **{result['word_count']} words** detected."
-        )
+        word_count = len(text.split())
+        character_count = len(text)
 
-        st.write("### 💡 Suggestions")
+        col1, col2 = st.columns(2)
 
-        suggestions = []
+        with col1:
+            st.metric("Words", word_count)
 
-        if not result["education"]:
-            suggestions.append("Add a clear Education section.")
+        with col2:
+            st.metric("Characters", character_count)
 
-        if len(result["skills"]) < 5:
-            suggestions.append("Add more relevant skills.")
+        # ---------- SUGGESTIONS ----------
+        st.write("### 💡 Improvement Suggestions")
 
-        if not result["experience"]:
-            suggestions.append(
-                "Add work experience or internship details if applicable."
-            )
+        if result["suggestions"]:
 
-        if not result["projects"]:
-            suggestions.append("Add academic or personal projects.")
-
-        if not result["certifications"]:
-            suggestions.append(
-                "Add relevant certifications if you have them."
-            )
-
-        if not result["summary"]:
-            suggestions.append(
-                "Add a professional summary or career objective."
-            )
-
-        if not result["email"]:
-            suggestions.append("Add a professional email address.")
-
-        if not result["phone"]:
-            suggestions.append("Add a contact phone number.")
-
-        if suggestions:
-            for suggestion in suggestions:
+            for suggestion in result["suggestions"]:
                 st.write("• " + suggestion)
+
         else:
-            st.write(
+            st.success(
                 "🎉 Your resume contains the major sections!"
             )
 
+        # ---------- EXTRACTED TEXT ----------
+        with st.expander("🔎 View Extracted Resume Text"):
+            st.text(text[:10000])
+
 else:
-    st.info("Please upload a PDF or DOCX resume to begin.")
+
+    st.info(
+        "Please upload a PDF or DOCX resume to begin."
+    )
