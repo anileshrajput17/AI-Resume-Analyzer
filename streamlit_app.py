@@ -7,7 +7,55 @@ st.set_page_config(
     page_icon="🤖",
     layout="centered"
 )
+# =========================
+# VANSHiKA - UI DESIGN
+# =========================
 
+st.markdown("""
+<style>
+
+.main-title {
+    text-align: center;
+    font-size: 42px;
+    font-weight: 800;
+    margin-bottom: 5px;
+}
+
+.subtitle {
+    text-align: center;
+    font-size: 17px;
+    opacity: 0.8;
+    margin-bottom: 25px;
+}
+
+.stButton > button {
+    width: 100%;
+    border-radius: 12px;
+    font-weight: 700;
+    padding: 10px;
+}
+
+.stFileUploader {
+    border-radius: 15px;
+}
+
+.design-card {
+    padding: 18px;
+    border-radius: 15px;
+    border: 1px solid rgba(128,128,128,0.35);
+    margin: 10px 0;
+}
+
+.footer {
+    text-align: center;
+    margin-top: 35px;
+    padding: 15px;
+    opacity: 0.75;
+    font-size: 14px;
+}
+
+</style>
+""", unsafe_allow_html=True)
 # =========================
 # TEXT EXTRACTION
 # =========================
@@ -286,14 +334,24 @@ def analyze_resume(text):
 # =========================
 # USER INTERFACE
 # =========================
+st.markdown(
+    '<div class="main-title">🤖 AI Resume Analyzer</div>',
+    unsafe_allow_html=True
+)
 
-st.title("🤖 AI Resume Analyzer")
+st.markdown(
+    '<div class="subtitle">'
+    'Smart Resume Analysis using AI & NLP'
+    '</div>',
+    unsafe_allow_html=True
+)
 
 st.write(
     "Upload your resume and get an automated analysis "
     "based on skills, education, experience, projects, "
     "certifications and resume structure."
 )
+
 
 st.divider()
 
@@ -330,7 +388,7 @@ if resume is not None:
             "Resume Score",
             f"{result['score']}/100"
         )
-
+st.progress(result["score"] / 100)
         st.divider()
 
         # ---------- SECTIONS ----------
@@ -396,3 +454,10 @@ else:
     st.info(
         "Please upload a PDF or DOCX resume to begin."
     )
+st.markdown(
+    '<div class="footer">'
+    '🎨 UI & Design: Vanshika<br>'
+    '📄 AI Resume Analyzer — Class XII AI Project'
+    '</div>',
+    unsafe_allow_html=True
+)
