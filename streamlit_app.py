@@ -388,7 +388,7 @@ if resume is not None:
             "Resume Score",
             f"{result['score']}/100"
         )
-st.progress(result["score"] / 100)
+        st.progress(result["score"] / 100)
         st.divider()
 
         # ---------- SECTIONS ----------
